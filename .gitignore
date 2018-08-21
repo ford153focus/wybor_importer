@@ -1,0 +1,5 @@
+/.idea
+/.vs*
+/files
+/vendor
+PHP_errors.log

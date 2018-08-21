@@ -1,0 +1,9 @@
+{
+    "require": {
+        "php" : "^7.1",
+        "ext-curl": "*",
+        "ext-iconv": "*",
+        "ext-simplexml": "*",
+        "electrolinux/phpquery": "^0.9.6"
+    }
+}
