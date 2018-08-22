@@ -23,27 +23,27 @@ class OldSiteExport
         $this->parseCsvArray();
     }
 
-    private function charsetFix ()
+    private function charsetFix()
     {
         foreach ($this->csvArray as &$row) {
             foreach ($row as &$cell) {
-                $cell = iconv( 'windows-1251', 'utf-8', $cell);
+                $cell = iconv('windows-1251', 'utf-8', $cell);
             }
         }
     }
 
-    public function cutHeader ()
+    public function cutHeader()
     {
         $this->header[] = array_shift($this->csvArray);
         $this->header[] = array_shift($this->csvArray);
         $this->header[] = array_shift($this->csvArray);
     }
 
-    public function parseCsvArray ()
+    public function parseCsvArray()
     {
         foreach ($this->csvArray as $row) {
-            $hash=[];
-            for ($i=0; $i<sizeof($this->header[0]); $i++) {
+            $hash = [];
+            for ($i = 0; $i < sizeof($this->header[0]); $i++) {
                 @$hash[$this->header[0][$i]] = $row[$i];
             }
             $this->items[] = $hash;
@@ -52,20 +52,20 @@ class OldSiteExport
         return $this->items;
     }
 
-    public function getVendorNameByItem(array $requiredItem) : ?string
+    public function getVendorNameByItem(array $requiredItem): string
     {
-        foreach ($this->items as &$oldExportItem) {
-            if ($oldExportItem['id'] == $requiredItem['parent-id']) {
-                $requiredItemSeries = $oldExportItem;
+        foreach ($this->items as &$possibleSeries) {
+            if ($possibleSeries['id'] == $requiredItem['parent-id']) {
+                $requiredItemSeries = $possibleSeries;
+
+                foreach ($this->items as &$possibleVendor) {
+                    if ($possibleVendor['id'] == $requiredItemSeries['parent-id']) {
+                        return $possibleVendor['name'];
+                    }
+                }
             }
         }
 
-        foreach ($this->items as &$oldExportItem) {
-            if ($oldExportItem['id'] == $requiredItemSeries['parent-id']) {
-                $requiredItemVendor = $oldExportItem;
-            }
-        }
-
-        return $requiredItemVendor['name'];
+        return '';
     }
 }

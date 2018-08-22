@@ -11,6 +11,24 @@ namespace Lum\Wybor;
 
 class Incoming
 {
+    const DESTINATIONS = [
+        'Системы телекоммуникации и связи',
+        'Электростанции и подстанции или Электроэнергетическое оборудование (EPS)',
+        'Источники бесперебойного питания (UPS)',
+        'Системы аварийного освещения',
+        'Системы пожарной и охранной сигнализации',
+        'Резервное питание различных промышленных объектов',
+        'Питание переносного оборудования',
+        'Автоматика на железнодорожном транспорте или Железнодорожная автоматика',
+        'Системы солнечной и ветроэнергетики',
+        'Инвалидные коляски',
+        'Гольф-кары',
+        'Уборочная техника',
+        'Электроинструмент',
+        'Электронные устройства и оборудование',
+        'Аккумуляторы для лодок и катеров',
+        'Аккумуляторы для ЖД автоматики'
+    ];
     public $items = [];
 
     public function __construct()
@@ -23,7 +41,7 @@ class Incoming
     {
         $csvArray = Utils::csvFileToArray(Config::INCOMING_CSV_FILENAME);
 
-        for ($i=3; $i<count($csvArray); $i++) {
+        for ($i = 3; $i < count($csvArray); $i++) {
             $item = [];
 
             $item['Бренд'] = $csvArray[$i][1];
@@ -60,61 +78,115 @@ class Incoming
         }
     }
 
-    private function cleanUp ()
+    private function cleanUp()
     {
         foreach ($this->items as &$item) {
             foreach ($item as &$cell) {
                 $cell = trim($cell);
-                if ($cell === "не применимо") {$cell = "";}
-                if ($cell === "нет данных") {$cell = "";}
+                if ($cell === "не применимо") {
+                    $cell = "";
+                }
+                if ($cell === "нет данных") {
+                    $cell = "";
+                }
             }
         }
     }
 
-    public function grabInfoFromOldExport($incoming, $oldSiteExport)
+    public function fillDestinations()
+    {
+        foreach ($this->items as &$item) {
+            if ($item['Область применения'] !== '') {
+                if ($item['Область применения'] === 'все' || $item['Область применения'] === 'всё') {
+                    $item['Область применения'] = implode(', ', self::DESTINATIONS);
+                } else {
+                    $str = '';
+                    foreach (explode(', ', $item['Область применения']) as $dest) {
+                        $str .= self::DESTINATIONS[(int)$dest - 1] . ', ';
+                    }
+                    $str = rtrim($str, ', ');
+                    $item['Область применения'] = $str;
+                }
+            }
+        }
+    }
+
+    public function mergeSimilar()
+    {
+        for ($i = 0; $i < count($this->items); $i++) {
+            for ($j = 0; $j < count($this->items); $j++) {
+                if ($i !== $j) { // items is not the same (issue of double brute force)
+                    $item1 = $this->items[$i];
+                    $item2 = $this->items[$j];
+                    if ($item1['Бренд'] === $item2['Бренд'] && $item1['Модель'] === $item2['Модель']) { // but same model
+                        foreach ($item1 as $key => $value) { // iterate item props
+                            if ($item1[$key] !== $item2[$key] && $item2[$key] !== '') { // if props value not same and empty - concatinate values
+                                $item1[$key] = $item1[$key] === '' ? $item2[$key] : "{$item1[$key]}, $item2[$key]";
+                            }
+                        }
+                        $this->items[$i] = $item1;
+                        unset($this->items[$j]);
+                        array_splice($this->items, 0, 0); //reindex
+                        $this->mergeSimilar();
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    public function grabInfoFromOldExport(OldSiteExport $oldSiteExport) : void
     {
         foreach ($oldSiteExport->items as &$oldExportItem) {
-            if ($oldExportItem['Бренд'] === 'CSB' && $oldExportItem['Модель'] === 'hrl12150w') {
-                true;
-            }
-            foreach ($incoming->items as &$incomingItem) {
-                if($incomingItem['Модель'] === str_replace(' ', '', $oldExportItem['name'])) {
-                    if ($incomingItem['Бренд'] === $oldSiteExport->getVendorNameByItem($oldExportItem)) {
-                        $incomingItem['Применение'] = $oldExportItem['primenenie'];
-                        $incomingItem['Описание'] = $oldExportItem['descr'];
-                        $incomingItem['Изображение'] = $oldExportItem['menu_pic_a'];
-                        $incomingItem['PDF-файл'] = $oldExportItem['fajl_pdf'];
-                        $incomingItem['Текст'] = $oldExportItem['tekst'];
-                        if ($incomingItem['Пункты меню'] === '') {
+            foreach ($this->items as &$item) {
+                if ($item['Модель'] === str_replace(' ', '', $oldExportItem['name'])) {
+                    if ($item['Бренд'] === $oldSiteExport->getVendorNameByItem($oldExportItem)) {
+                        $item['Применение'] = $oldExportItem['primenenie'];
+                        $item['Описание'] = $oldExportItem['descr'];
+                        $item['Изображение'] = $oldExportItem['menu_pic_a'];
+                        $item['PDF-файл'] = $oldExportItem['fajl_pdf'];
+                        $item['Текст'] = $oldExportItem['tekst'];
+                        if ($item['Пункты меню'] === '') {
                             $doc = new \DOMDocument('1.0', 'UTF-8');
-                            $doc->loadHTML('<?xml encoding="UTF-8">'.$oldExportItem['primenenie']);
+                            $doc->loadHTML('<?xml encoding="UTF-8">' . $oldExportItem['primenenie']);
                             $sxml = simplexml_import_dom($doc);
                             foreach ($sxml->xpath('body/ul/li') as $li) {
-                                $incomingItem['Пункты меню'] .= $li->__toString().',';
+                                $item['Пункты меню'] .= $li->__toString() . ',';
                             }
-                            $incomingItem['Пункты меню'] = rtrim($incomingItem['Пункты меню'], ',');
+                            $item['Пункты меню'] = rtrim($item['Пункты меню'], ',');
                         }
                     }
                 }
             }
         }
+    }
 
-        foreach ($incoming->items as &$incomingItem) {
-            if ($incomingItem['PDF-файл'] === '') {
-                if (\Lum\Wybor\Utils::checkUrlForCode200("http://www.wybor-battery.com/doc/{$incomingItem['Бренд']}/{$incomingItem['Модель']}.pdf") === true) {
-                    $incomingItem['PDF-файл'] = "/doc/{$incomingItem['Бренд']}/{$incomingItem['Модель']}.pdf";
+    public function grabInfoFromOldSite() : void
+    {
+        foreach ($this->items as &$item) {
+            if ($item['PDF-файл'] === '') {
+                if (Utils::checkUrlForCode200("http://www.wybor-battery.com/doc/{$item['Бренд']}/{$item['Модель']}.pdf") === true) {
+                    $item['PDF-файл'] = "/doc/{$item['Бренд']}/{$item['Модель']}.pdf";
                 }
             }
         }
-
-        return $incoming->items;
     }
 
-    public static function grabFile($url)
+    public function grabFiles() : void
     {
-        if ($url === '') { return; }
+        foreach ($this->items as $item) {
+            $this->grabFile($item['PDF-файл']);
+            $this->grabFile($item['Изображение']);
+        }
+    }
 
-        $url = 'http://www.wybor-battery.com/'.$url;
+    public static function grabFile($url) : void
+    {
+        if ($url === '') {
+            return;
+        }
+
+        $url = 'http://www.wybor-battery.com/' . $url;
 
         $file = Config::DESTINATION_PATH . $url;
 
@@ -137,35 +209,38 @@ class Incoming
         }
     }
 
-    function toArray() : array {
+    function toArray(): array
+    {
         $newExportArray = [];
-        $id=11000;
+        $id = 11000;
         foreach ($this->items as $item) {
             $row = [];
 
-            $row[]= $id; // id / id / native
-            $row[]= $item['Модель']; // name / Наименование / native
-            $row[]= '82'; // type-id / Идентификатор типа / native
-            $row[]= '1'; // is-active / Активность / native
-            $row[]= '1'; // template-id / Идентификатор шаблона / native
-            $row[]= $item['parent-id']; // parent-id / id родительской страницы / native
-            $row[] = sprintf("Аккумулятор %s серии %s - купить в Санкт-Петербурге и Москве", $item['Бренд'], $item['Серия']); //title / Поле TITLE / string
+            $row[] = $id; // id / id / native
+            $row[] = $item['Модель']; // name / Наименование / native
+            $row[] = '82'; // type-id / Идентификатор типа / native
+            $row[] = '1'; // is-active / Активность / native
+            $row[] = '1'; // template-id / Идентификатор шаблона / native
+            $row[] = $item['parent-id']; // parent-id / id родительской страницы / native
+            $row[] = sprintf("Аккумулятор %s серии %s - купить в Санкт-Петербурге и Москве", $item['Бренд'],
+                $item['Серия']); //title / Поле TITLE / string
             $row[] = sprintf("Аккумулятор %s серии %s", $item['Бренд'], $item['Серия']); //h1 / Поле H1 / string
-            $row[] = sprintf("Аккумуляторная батарея %s %s от производителя по оптовым ценам. Звоните и заказывайте прямо сейчас!", $item['Бренд'], $item['Модель']); //meta_descriptions / Поле meta DESCRIPTIONS / string
+            $row[] = sprintf("Аккумуляторная батарея %s %s от производителя по оптовым ценам. Звоните и заказывайте прямо сейчас!",
+                $item['Бренд'], $item['Модель']); //meta_descriptions / Поле meta DESCRIPTIONS / string
             $row[] = $item['Текст']; // tekst / Описание серии / wysiwyg
-            $row[]= ''; // index_source / Источник индекса / int
-            $row[]= ''; // index_state / Индексация / float
-            $row[]= ''; // index_date / Дата индексации / date
-            $row[]= ''; // index_choose / Выбран для индексации / boolean
-            $row[]= ''; // index_level / Установленный уровень вложенности / int
-            $row[]= ''; // meta_keywords / Поле meta KEYWORDS / text
+            $row[] = ''; // index_source / Источник индекса / int
+            $row[] = ''; // index_state / Индексация / float
+            $row[] = ''; // index_date / Дата индексации / date
+            $row[] = ''; // index_choose / Выбран для индексации / boolean
+            $row[] = ''; // index_level / Установленный уровень вложенности / int
+            $row[] = ''; // meta_keywords / Поле meta KEYWORDS / text
             $row[] = $item['Изображение']; // menu_pic_a / Изображение активного раздела / img_file
             $row[] = $item['Описание']; // descr / Описание / wysiwyg
-            $row[]= ''; // logo_proizvoditelya / Лого производителя / img_file
-            $row[]= ''; // vyvodit_na_glavnoj / Выводить на главной / boolean
-            $row[]= ''; // izobrazhenie_v_slajder / Изображение в слайдер / img_file
-            $row[]= $item['Применение']; // primenenie / Применение / wysiwyg
-            $row[]= ''; // date_create_object / Дата создания объекта / date
+            $row[] = ''; // logo_proizvoditelya / Лого производителя / img_file
+            $row[] = ''; // vyvodit_na_glavnoj / Выводить на главной / boolean
+            $row[] = ''; // izobrazhenie_v_slajder / Изображение в слайдер / img_file
+            $row[] = $item['Применение']; // primenenie / Применение / wysiwyg
+            $row[] = ''; // date_create_object / Дата создания объекта / date
             $row[] = '0'; // price / Цена / price
             $row[] = $item['Бренд']; // brend / Бренд / relation
             $row[] = $item['Серия']; // seriya / Серия / relation
@@ -188,7 +263,7 @@ class Incoming
             $row[] = $item['Выводы']; // vyvody / Выводы / string
             $row[] = $item['Максимальный ток разряда']; // maksimalnyj_tok_razryada / Максимальный ток разряда / float
             $row[] = $item['Мощность']; // mownost / Мощность / float
-            $row[]= $item['PDF-файл']; // fajl_pdf / Файл pdf / file
+            $row[] = $item['PDF-файл']; // fajl_pdf / Файл pdf / file
 
             $newExportArray[] = $row;
             $id++;

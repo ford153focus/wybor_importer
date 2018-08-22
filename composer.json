@@ -2,6 +2,7 @@
     "require": {
         "php" : "^7.1",
         "ext-curl": "*",
+        "ext-dom": "*",
         "ext-iconv": "*",
         "ext-simplexml": "*",
         "electrolinux/phpquery": "^0.9.6"

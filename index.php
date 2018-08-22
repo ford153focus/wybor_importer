@@ -7,6 +7,8 @@
  */
 require __DIR__ . '/vendor/autoload.php';
 
+require __DIR__ . '/exceptions_error_handler.php';
+
 require 'lib/CurrentSiteExport.php';
 require 'lib/IncomingCsv.php';
 require 'lib/OldSiteExport.php';
@@ -18,30 +20,31 @@ $currentSiteExport = new Wybor\CurrentSiteExport();
 $oldSiteExport = new Wybor\OldSiteExport();
 $incoming = new Wybor\Incoming();
 
+$incoming->fillDestinations();
+$incoming->mergeSimilar();
+
 $vendors = new Wybor\Vendors($currentSiteExport->items);
 
 foreach ($incoming->items as &$item) {
-    $item['parent-id'] = $vendors->getItemParentId($item['Бренд'], $item['Серия']);
+    if ($item['Бренд'] !== '' && $item['Серия'] !== '') {
+        $item['parent-id'] = $vendors->getItemParentId($item['Бренд'], $item['Серия']);
+    }
 }
 
-$incoming->items = $incoming->grabInfoFromOldExport($incoming, $oldSiteExport);
+$incoming->grabInfoFromOldExport($oldSiteExport);
+$incoming->grabInfoFromOldSite();
 
-//$output->fillDestinations($incoming->array);
-
-//grabFiles
-foreach ($incoming->items as $item) {
-    $incoming->grabFile($item['PDF-файл']);
-    $incoming->grabFile($item['Изображение']);
-}
+//$incoming->grabFiles();
 
 //setDefaultImages
 foreach ($incoming->items as &$item) {
-    $item['Изображение'] = $item['Изображение'] === '' ? sprintf("/images/cms/data/%s_logo.jpg", strtolower($item['Бренд'])) : $item['Изображение'];
+    $item['Изображение'] = $item['Изображение'] === '' ? sprintf("/images/cms/data/%s_logo.jpg",
+        strtolower($item['Бренд'])) : $item['Изображение'];
 }
 
 $newExportArray = array_merge($currentSiteExport->header, $incoming->toArray());
 
-Wybor\Utils::dumpArrayToCsvFile($newExportArray, __DIR__.'/files/new.csv');
-copy(__DIR__.'/files/new.csv', Wybor\Config::DESTINATION_PATH.'/1801.csv');
+Wybor\Utils::dumpArrayToCsvFile($newExportArray, __DIR__ . '/files/new.csv');
+copy(__DIR__ . '/files/new.csv', Wybor\Config::DESTINATION_PATH . '/1801.csv');
 
 true;

@@ -73,6 +73,7 @@ class Vendors
             }
         }
         var_dump("Серия {$series} вендора {$vendor} отсутствует");
-        return $vendor0->id;
+        /** @noinspection PhpUndefinedVariableInspection */
+        return isset($vendor0->id) ? $vendor0->id : '';
     }
 }
